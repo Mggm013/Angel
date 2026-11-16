@@ -1,0 +1,52 @@
+name: Gerar APK A.N.G.E.L. (Expo EAS)
+
+on:
+  workflow_dispatch:
+    inputs:
+      expo_project_id:
+        description: 'ID do projeto Expo (Settings > General)'
+        required: true
+        type: string
+
+jobs:
+  build_apk:
+    name: Solicitar APK Android
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Baixar codigo do repositorio
+        uses: actions/checkout@v4
+
+      - name: Preparar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Instalar dependencias
+        run: npm install --no-fund --no-audit
+
+      - name: Vincular ao projeto Expo existente
+        env:
+          EXPO_PROJECT_ID: ${{ inputs.expo_project_id }}
+        run: |
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const id = process.env.EXPO_PROJECT_ID?.trim();
+          if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id || '')) {
+            throw new Error('Informe o UUID correto do projeto Expo.');
+          }
+          const app = JSON.parse(fs.readFileSync('app.json', 'utf8'));
+          app.expo.extra ??= {};
+          app.expo.extra.eas = { ...(app.expo.extra.eas || {}), projectId: id };
+          fs.writeFileSync('app.json', JSON.stringify(app, null, 2) + '\n');
+          NODE
+
+      - name: Autenticar no Expo
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Iniciar compilacao EAS de APK
+        run: eas build --platform android --profile preview --non-interactive --no-wait --clear-cache
